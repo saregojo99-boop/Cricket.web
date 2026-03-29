@@ -5,15 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> live</title>
-  <script>
-/* 🔴 Firefox Block + Telegram Redirect */
-(function() {
-  var ua = navigator.userAgent.toLowerCase();
-  if (ua.indexOf('firefox') !== -1 && ua.indexOf('seamonkey') === -1) {
-    window.location.href = "https://t.me/allinone_reborn";
-  }
-})();
-</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css" crossorigin="anonymous">
   <style>
@@ -91,7 +82,7 @@
    </div>
   </div>
   <div class="shaka-video-container" data-shaka-player>
-   <video autoplay playsinline preload="metadata" poster=""></video>
+   <video autoplay playsinline preload="auto" poster=""></video>
   </div>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
@@ -136,11 +127,11 @@
 
         let drmConfig = {
           clearKeys: {
-            "294b5761cefc22d0c6312939e13d8278": "52148f1042d238849f0a7813f1da8a7b"
+            "aa392dd68481103587fcc21bcb6d205a": "9c796aecdd9d606d6f877e36b3f0753e"
           }
         };
         let cookieHeader = "";
-        let streamUrl = "https://netskrt.live.pv-cdn.net/OTTB/lhr-nitro/live/dash/enc/cllekigzzn/out/v1/bd3b0c314fff4bb1ab4693358f3cd2d3/cenc.mpd";
+        let streamUrl = "https://a201aivottlinear-a.akamaihd.net/OTTB/iad-nitro/live/clients/dash/enc/6hyelcoor8/out/v1/5f4dacfb19bf410296d2d46cded7c4d2/cenc.mpd";
 
         try {
           const response = await fetch('');
@@ -165,25 +156,75 @@
           console.error('Failed to fetch M3U:', error);
         }
 
+        // FIXED: Enhanced prebuffer configuration for non-stop streaming
         player.configure({
           drm: drmConfig,
           streaming: {
             lowLatencyMode: true,
-            bufferingGoal: 15,
-            rebufferingGoal: 2,
-            bufferBehind: 15,
-            retryParameters: { timeout: 10000, maxAttempts: 5, baseDelay: 300, backoffFactor: 1.2 },
-            segmentRequestTimeout: 8000,
-            segmentPrefetchLimit: 2,
-            useNativeHlsOnSafari: true
+            bufferingGoal: 60,           // Increased from 15 to 60 seconds
+            rebufferingGoal: 20,          // Increased from 2 to 20 seconds
+            bufferBehind: 30,              // Increased from 15 to 30 seconds
+            alwaysStreaming: true,         // Enable always streaming mode
+            retryParameters: { 
+              timeout: 15000,               // Increased from 10000 to 15000
+              maxAttempts: 10,               // Increased from 5 to 10
+              baseDelay: 500,                 // Increased from 300 to 500
+              backoffFactor: 1.5              // Increased from 1.2 to 1.5
+            },
+            segmentRequestTimeout: 15000,    // Increased from 8000 to 15000
+            segmentPrefetchLimit: 10,         // Increased from 2 to 10
+            useNativeHlsOnSafari: true,
+            smallGapLimit: 0.5,               // Add small gap handling
+            jumpLargeGaps: true,               // Jump large gaps instead of stalling
+            stallEnabled: true,                 // Enable stall detection
+            stallThreshold: 2,                   // Stall threshold in seconds
+            rebufferingEnabled: true,             // Enable rebuffering
+            durationBackoff: 1,                    // Duration backoff
+            ignoreTextStreamFailures: true,         // Ignore text stream failures
+            ignoreManifestUpdateFailures: true,      // Ignore manifest update failures
+            manifestUpdateRetryParameters: {
+              timeout: 10000,
+              maxAttempts: 5
+            }
           },
-          manifest: { retryParameters: { timeout: 8000, maxAttempts: 3 } }
+          manifest: { 
+            retryParameters: { 
+              timeout: 15000,               // Increased from 8000 to 15000
+              maxAttempts: 10,                // Increased from 3 to 10
+              backoffFactor: 1.5
+            },
+            dash: {
+              ignoreMinBufferTime: true,      // Ignore min buffer time from manifest
+              autoCorrectDrift: true,          // Auto correct drift
+              initialSegmentLimit: 2000         // Increased segment limit
+            }
+          },
+          offline: {
+            usePersistentLicense: false
+          },
+          abr: {
+            enabled: true,
+            defaultBandwidthEstimate: 8000000,  // 8 Mbps default bandwidth
+            switchInterval: 2,                     // Check ABR every 2 seconds
+            bandwidthUpgradeTarget: 0.7,            // Upgrade at 70% usage
+            bandwidthDowngradeTarget: 0.5,           // Downgrade at 50% usage
+            restrictions: {
+              minWidth: 320,
+              maxWidth: 1920,
+              minHeight: 240,
+              maxHeight: 1080,
+              minPixels: 76800,
+              maxPixels: 2073600
+            }
+          }
         });
 
         player.getNetworkingEngine().registerRequestFilter((type, request) => {
-          request.headers['Referer'] = 'https://www.jiotv.com/';
+          request.headers['Referer'] = 'https://live-pv-ta.amazon.fastly-edge.com/';
           request.headers['User-Agent'] = "plaYtv/7.1.5 (Linux;Android 13) ExoPlayerLib/2.11.6";
           request.headers['Cookie'] = cookieHeader;
+          request.headers['Connection'] = 'keep-alive';  // Add keep-alive header
+          request.headers['Keep-Alive'] = 'timeout=60';   // Keep connection alive
 
           if (
             (type === shaka.net.NetworkingEngine.RequestType.MANIFEST ||
@@ -195,14 +236,139 @@
           }
         });
 
+        // FIXED: Add error handling and auto-recovery
+        player.addEventListener('error', (event) => {
+          console.error('Player error:', event.detail);
+          
+          // Attempt to recover from error
+          if (event.detail && event.detail.type === shaka.util.Error.Severity.RECOVERABLE) {
+            console.log('Attempting to recover from error...');
+            player.load(streamUrl).catch(e => {
+              console.error('Recovery failed:', e);
+              // Retry after 3 seconds
+              setTimeout(() => {
+                player.load(streamUrl).catch(console.error);
+              }, 3000);
+            });
+          }
+        });
+
+        // FIXED: Add buffering event handling
+        video.addEventListener('waiting', () => {
+          console.log('Buffering...');
+          // Force rebuffer if stuck
+          if (player) {
+            player.getConfiguration().streaming.rebufferingGoal = 30;
+          }
+        });
+
+        video.addEventListener('playing', () => {
+          console.log('Playing smoothly');
+        });
+
+        // FIXED: Add stall detection and recovery
+        let stallTimeout;
+        video.addEventListener('stalled', () => {
+          console.log('Stream stalled, attempting recovery...');
+          if (stallTimeout) clearTimeout(stallTimeout);
+          stallTimeout = setTimeout(() => {
+            if (video.readyState < 3) { // HAVE_FUTURE_DATA
+              video.load(); // Reload video element
+              player.load(streamUrl).catch(console.error);
+            }
+          }, 5000);
+        });
+
         try {
           await player.load(streamUrl);
+          console.log('Stream loaded successfully');
+          
+          // FIXED: Periodic buffer check
+          setInterval(() => {
+            if (video && player) {
+              const buffered = video.buffered;
+              if (buffered.length > 0) {
+                const currentTime = video.currentTime;
+                const bufferedEnd = buffered.end(buffered.length - 1);
+                const bufferAhead = bufferedEnd - currentTime;
+                
+                // If buffer is low, force more buffering
+                if (bufferAhead < 10) {
+                  console.log('Low buffer detected:', bufferAhead.toFixed(2), 'seconds');
+                  player.configure({ streaming: { bufferingGoal: 60 } });
+                }
+              }
+            }
+          }, 10000); // Check every 10 seconds
+          
         } catch (error) {
           console.error('Load error:', error);
+          // Retry loading after 5 seconds
+          setTimeout(() => {
+            player.load(streamUrl).catch(console.error);
+          }, 5000);
         }
       }
     });
   </script>
+  <script>
+(function(){
+
+// run only on mobile devices
+if(!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return;
+
+function showPopup(){
+
+if(document.getElementById("adbPopup")) return;
+
+var d=document.createElement("div");
+d.id="adbPopup";
+d.style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px";
+
+d.innerHTML=
+'<div style="background:#fff;border-radius:14px;padding:25px;max-width:320px;width:100%;text-align:center;font-family:Arial">'+
+'<div style="font-size:40px;margin-bottom:10px">⚠️</div>'+
+'<h2 style="margin:0 0 10px 0">AdBlock Detected</h2>'+
+'<p style="font-size:14px;color:#555;line-height:1.6">Your browser ad blocker is enabled.<br><br>Please disable <b>AdBlock / Brave Shields</b> to continue using this page.</p>'+
+'<button onclick="location.reload()" style="margin-top:15px;width:100%;padding:12px;border:none;background:#ff3b3b;color:#fff;border-radius:8px;font-size:16px;font-weight:bold">Refresh Page</button>'+
+'<p style="margin-top:10px;font-size:12px;color:#888">After disabling AdBlock, press refresh.</p>'+
+'</div>';
+
+document.body.appendChild(d);
+document.body.style.overflow="hidden";
+}
+
+function detectAdblock(){
+
+var bait=document.createElement("div");
+bait.className="ads ad-banner adsbox ad-unit ad-container banner-ad";
+bait.style="width:1px;height:1px;position:absolute;left:-9999px;top:-9999px";
+
+document.body.appendChild(bait);
+
+setTimeout(function(){
+
+var style=window.getComputedStyle(bait);
+
+if(
+bait.offsetParent===null ||
+bait.offsetHeight===0 ||
+style.display==="none" ||
+style.visibility==="hidden"
+){
+showPopup();
+}
+
+bait.remove();
+
+},800);
+
+}
+
+window.addEventListener("load",detectAdblock);
+
+})();
+</script>
   <!-- Anti-Adblock Popup -->
   <div class="adb" id="adb" style="display: none;">
    <div class="adbs">
